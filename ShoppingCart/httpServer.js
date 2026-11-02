@@ -11,6 +11,8 @@ const send = (res, code, type, body) => {
   res.end(body);
 };
 
+const sendJson = (res, code, data) => send(res, code, 'application/json', JSON.stringify(data));
+
 const server = http.createServer((req, res) => {
   const { method, url } = req;
 
@@ -19,7 +21,7 @@ const server = http.createServer((req, res) => {
   }
 
   if (method === 'GET' && url === '/cart') {
-    return send(res, 200, 'application/json', JSON.stringify(cart));
+    return sendJson(res, 200, cart);
   }
 
   if (method === 'GET' && url === '/about') {
@@ -33,6 +35,46 @@ const server = http.createServer((req, res) => {
       }
       send(res, 200, 'text/html', data);
     });
+  }
+
+  if (url === '/add-to-cart') {
+    if (method !== 'POST') {
+      return sendJson(res, 405, { error: 'Method not allowed. Use POST' });
+    }
+
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk;
+    });
+
+    req.on('end', () => {
+      let parsed;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        return sendJson(res, 400, { error: 'Invalid JSON' });
+      }
+
+      const { id, productName, price, quantity } = parsed;
+
+      if (
+        typeof id !== 'number' ||
+        typeof productName !== 'string' || productName.trim() === '' ||
+        typeof price !== 'number' || price <= 0 ||
+        typeof quantity !== 'number' || quantity <= 0
+      ) {
+        return sendJson(res, 400, { error: 'id, productName, price and quantity are required and must be valid' });
+      }
+
+      if (cart.some(item => item.id === id)) {
+        return sendJson(res, 409, { error: 'Product with this id already exists' });
+      }
+
+      const product = { id, productName, price, quantity };
+      cart.push(product);
+      sendJson(res, 201, { message: 'Product added successfully', product });
+    });
+    return;
   }
 
   send(res, 404, 'text/html', '<h1>404 Not Found</h1>');
